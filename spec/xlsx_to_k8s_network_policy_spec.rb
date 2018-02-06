@@ -1,8 +1,9 @@
 require "roo"
+require "xlsx_to_k8s_network_policy"
 
-RSpec.describe "it" do
+RSpec.describe Reader do
   it "works" do
-    xlsx = Roo::Spreadsheet.open("./test/fixtures/network_policy.xlsx")
-    puts xlsx.info
+    config = Reader.read("./test/fixtures/network_policy.xlsx")
+    expect(config.zones.size).to eq(2)
   end
 end
