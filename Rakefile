@@ -16,8 +16,8 @@ Juwelier::Tasks.new do |gem|
   gem.name = "xlsx_to_k8s_network_policy"
   gem.homepage = "http://github.com/aisrael/xlsx_to_k8s_network_policy"
   gem.license = "MIT"
-  gem.summary = %Q{TODO: one-line summary of your gem}
-  gem.description = %Q{TODO: longer description of your gem}
+  gem.summary = %Q{Generate Kubernetes Network Policy from Excel}
+  gem.description = %Q{Generate Kubernetes Network Policy YAML resource definitions from .xlsx Excel spreadsheets}
   gem.email = "aisrael@gmail.com"
   gem.authors = ["Alistair A. Israel"]
 
