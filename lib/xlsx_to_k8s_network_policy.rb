@@ -3,8 +3,10 @@ require "roo"
 class Config
   attr_reader :zones
   def initialize
-    @zones = {}
+    @zones = []
   end
+
+  Zone = Struct.new(:name, :cidrs)
 end
 
 class Reader
@@ -22,9 +24,9 @@ class Reader
     @xlsx = Roo::Spreadsheet.open("./test/fixtures/network_policy.xlsx")
     config = Config.new
     zones_sheet = @xlsx.sheet("Zones")
-    zones_sheet.each(zone: "Zone", cidr: "CIDRs") do |h|
-      next if h[:zone] == "Zone" && h[:cidr] == "CIDRs"
-      config.zones[h[:zone]] = h[:cidr]
+    zones_sheet.each(name: "Zone", cidrs: "CIDRs") do |h|
+      next if h[:name] == "Zone" && h[:cidrs] == "CIDRs"
+      config.zones << Config::Zone.new(h[:name], h[:cidrs].split(/\s*,\s*/))
     end
     config
   end
