@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 source 'https://rubygems.org'
-# Add dependencies required to use your gem here.
-# Example:
+
+gem 'activesupport', '~> 5.1.4'
 gem 'roo', '~> 2.7.1'
 
 # Add dependencies to develop your gem here.
