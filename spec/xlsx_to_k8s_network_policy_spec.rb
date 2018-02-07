@@ -20,6 +20,23 @@ RSpec.describe 'xlsx_to_k8s_network_policy' do
         expected = YAML.load_stream(File.open('./test/fixtures/single_zone.yml'))
         expect(actual).to eq(expected)
       end
+      it 'works with a single zone with multiple CIDRs' do
+        network_policy = NetworkPolicy.new
+        network_policy.add_zone('Front End', %w[10.10.1.0/24 10.10.2.0/24])
+        actual = network_policy.to_doc_hashes
+        expect(actual.size).to eq(2)
+        expected = YAML.load_stream(File.open('./test/fixtures/single_zone_with_multiple_cidrs.yml'))
+        expect(actual).to eq(expected)
+      end
+      it 'works with two independent zones' do
+        network_policy = NetworkPolicy.new
+        network_policy.add_zone('Front End', %w[10.10.1.0/24])
+        network_policy.add_zone('Back End', %w[10.11.0.0/24])
+        actual = network_policy.to_doc_hashes
+        expect(actual.size).to eq(3)
+        expected = YAML.load_stream(File.open('./test/fixtures/two_independent_zones.yml'))
+        expect(actual).to eq(expected)
+      end
     end
   end
 

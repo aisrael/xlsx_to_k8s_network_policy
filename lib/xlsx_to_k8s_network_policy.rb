@@ -35,11 +35,11 @@ class NetworkPolicy
         }
       }
       npd.pod_selector = zone_partition_label_selector
+      npd.allow_ingress(zone_partition_label_selector)
+      npd.allow_egress(zone_partition_label_selector)
       zone.cidrs.each do |cidr|
         npd.allow_ingress(cidr)
         npd.allow_egress(cidr)
-        npd.allow_ingress(zone_partition_label_selector)
-        npd.allow_egress(zone_partition_label_selector)
       end
       hashes << npd.to_hash
     end

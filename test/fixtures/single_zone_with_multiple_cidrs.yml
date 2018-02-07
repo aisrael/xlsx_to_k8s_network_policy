@@ -26,9 +26,11 @@ spec:
         matchLabels:
           partition: front-end
     - ipBlock: 10.10.1.0/24
+    - ipBlock: 10.10.2.0/24
   egress:
   - to:
     - podSelector:
         matchLabels:
           partition: front-end
     - ipBlock: 10.10.1.0/24
+    - ipBlock: 10.10.2.0/24
