@@ -16,33 +16,121 @@ class NetworkPolicy
     @zones.map(&:name)
   end
 
+  def add_zone(name, cidrs)
+    @zones << Zone.new(name, cidrs)
+  end
+
   Zone = Struct.new(:name, :cidrs)
 
   Rule = Struct.new(:from_zone, :to_zone, :allow)
 
   def to_doc_hashes
-    [NetworkPolicyDoc.new.to_hash]
+    hashes = [NetworkPolicyDoc.deny_all.to_hash]
+    @zones.each do |zone|
+      normalized_zone_name = zone.name.parameterize
+      npd = NetworkPolicyDoc.new("intra-#{normalized_zone_name}")
+      zone_partition_label_selector = {
+        matchLabels: {
+          partition: normalized_zone_name
+        }
+      }
+      npd.pod_selector = zone_partition_label_selector
+      zone.cidrs.each do |cidr|
+        npd.allow_ingress(cidr)
+        npd.allow_egress(cidr)
+        npd.allow_ingress(zone_partition_label_selector)
+        npd.allow_egress(zone_partition_label_selector)
+      end
+      hashes << npd.to_hash
+    end
+    hashes
   end
 
-  private
-
+  # A NetworkPolicyDoc is a hash generator
   class NetworkPolicyDoc
     attr_reader :name
-    def initialize(name = 'default-deny')
+    attr_accessor :pod_selector
+    attr_reader :ingresses
+    def initialize(name)
       @name = name
+      @pod_selector = {}
+      @ingresses = []
+      @egresses = []
     end
+
+    def self.deny_all
+      NetworkPolicyDoc.new('default-deny')
+    end
+
+    def allow_ingress(cidr_or_selector)
+      case cidr_or_selector
+      when String
+        @ingresses << cidr_or_selector
+      when Hash
+        @ingresses << cidr_or_selector
+      else
+        raise "Don't know how to handle ingress spec: #{cidr_or_selector}!"
+      end
+    end
+
+    def allow_egress(cidr_or_selector)
+      case cidr_or_selector
+      when String
+        @egresses << cidr_or_selector
+      when Hash
+        @egresses << cidr_or_selector
+      else
+        raise "Don't know how to handle egress spec: #{cidr_or_selector}!"
+      end
+    end
+
     def to_hash
-      {
+      hash = {
         apiVersion: 'networking.k8s.io/v1',
         kind: 'NetworkPolicy',
         metadata: {
           name: name
         },
         spec: {
-          podSelector: {},
+          podSelector: pod_selector,
           policyTypes: %w[Ingress Egress]
         }
-      }.deep_stringify_keys
+      }
+      add_ingress_and_egress(hash)
+      hash.deep_stringify_keys
+    end
+
+    def map_ingress_or_egress(ioe)
+      ioe.map do |ingress|
+        case ingress
+        when String
+          {
+            ipBlock: ingress
+          }
+        else
+          {
+            podSelector: ingress
+          }
+        end
+      end
+    end
+
+    private
+
+    def add_ingress_and_egress(hash)
+      unless @ingresses.empty?
+        hash[:spec][:ingress] = [
+          {
+            from: map_ingress_or_egress(@ingresses)
+          }
+        ]
+      end
+      return if @egresses.empty?
+      hash[:spec][:egress] = [
+        {
+          to: map_ingress_or_egress(@egresses)
+        }
+      ]
     end
   end
 end
@@ -113,8 +201,8 @@ class Reader
   end
 end
 
+# Writes a NetworkPolicy to YAML
 class Writer
-
   attr_reader :filename
 
   def initialize(filename)
@@ -130,5 +218,4 @@ class Writer
       YAML.dump_stream(network_policy.to_doc_hashes, f)
     end
   end
-
 end

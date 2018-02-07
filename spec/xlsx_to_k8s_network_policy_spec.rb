@@ -6,11 +6,19 @@ require 'xlsx_to_k8s_network_policy'
 RSpec.describe 'xlsx_to_k8s_network_policy' do
   describe NetworkPolicy do
     describe '#to_hash' do
-      it 'works when empty' do
+      it 'generates a deny_all policy when empty' do
         network_policy = NetworkPolicy.new
         actual = network_policy.to_doc_hashes
-        yaml = YAML.load_stream(File.open('./test/fixtures/deny_all.yml'))
-        expect(actual).to eq(yaml)
+        expected = YAML.load_stream(File.open('./test/fixtures/deny_all.yml'))
+        expect(actual).to eq(expected)
+      end
+      it 'works with a single zone' do
+        network_policy = NetworkPolicy.new
+        network_policy.add_zone('Front End', %w[10.10.1.0/24])
+        actual = network_policy.to_doc_hashes
+        expect(actual.size).to eq(2)
+        expected = YAML.load_stream(File.open('./test/fixtures/single_zone.yml'))
+        expect(actual).to eq(expected)
       end
     end
   end
