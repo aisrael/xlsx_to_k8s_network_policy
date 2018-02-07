@@ -7,6 +7,53 @@ require 'yaml'
 # The NetworkPolicy
 class NetworkPolicy
   attr_reader :zones, :rules
+
+  # A Zone
+  class Zone
+    attr_reader :name, :cidrs
+    def initialize(name, cidrs)
+      @name = name
+      @cidrs = cidrs
+    end
+
+    def normalized_name
+      name.parameterize
+    end
+
+    def as_partition_label_selector_hash
+      @hash ||= {
+        matchLabels: {
+          partition: normalized_name
+        }
+      }
+    end
+  end
+
+  # A Rule
+  class Rule
+    attr_accessor :from_zone, :to_zone
+    def initialize(from_zone, to_zone)
+      @from_zone = from_zone
+      @to_zone = to_zone
+    end
+
+    # rubocop:disable Metrics/AbcSize
+    def to_network_policy_doc
+      # rubocop:enable Metrics/AbcSize
+      normalized_from_zone_name = from_zone.normalized_name
+      normalized_to_zone_name = to_zone.normalized_name
+      npd = NetworkPolicyDoc.new("#{normalized_from_zone_name}-to-#{normalized_to_zone_name}")
+      npd.pod_selector = to_zone.as_partition_label_selector_hash
+      npd.allow_ingress(from_zone.as_partition_label_selector_hash)
+      npd.allow_egress(from_zone.as_partition_label_selector_hash)
+      from_zone.cidrs.each do |cidr|
+        npd.allow_ingress(cidr)
+        npd.allow_egress(cidr)
+      end
+      npd.to_hash
+    end
+  end
+
   def initialize
     @zones = []
     @rules = []
@@ -20,20 +67,27 @@ class NetworkPolicy
     @zones << Zone.new(name, cidrs)
   end
 
-  Zone = Struct.new(:name, :cidrs)
-
-  Rule = Struct.new(:from_zone, :to_zone, :allow)
+  def add_rule(from_zone_name, to_zone_name)
+    from_zone = @zones.find { |z| z.name == from_zone_name }
+    raise "No zone named #{from_zone_name}!" unless from_zone
+    to_zone = @zones.find { |z| z.name == to_zone_name }
+    raise "No zone named #{to_zone_name}!" unless to_zone
+    @rules << Rule.new(from_zone, to_zone)
+  end
 
   def to_doc_hashes
-    hashes = [NetworkPolicyDoc.deny_all.to_hash]
-    @zones.each do |zone|
-      normalized_zone_name = zone.name.parameterize
+    docs = [NetworkPolicyDoc.deny_all.to_hash]
+    docs += hash_zones
+    docs + hash_rules
+  end
+
+  private
+
+  def hash_zones
+    @zones.map do |zone|
+      normalized_zone_name = zone.normalized_name
       npd = NetworkPolicyDoc.new("intra-#{normalized_zone_name}")
-      zone_partition_label_selector = {
-        matchLabels: {
-          partition: normalized_zone_name
-        }
-      }
+      zone_partition_label_selector = zone.as_partition_label_selector_hash
       npd.pod_selector = zone_partition_label_selector
       npd.allow_ingress(zone_partition_label_selector)
       npd.allow_egress(zone_partition_label_selector)
@@ -41,9 +95,12 @@ class NetworkPolicy
         npd.allow_ingress(cidr)
         npd.allow_egress(cidr)
       end
-      hashes << npd.to_hash
+      npd.to_hash
     end
-    hashes
+  end
+
+  def hash_rules
+    @rules.map(&:to_network_policy_doc)
   end
 
   # A NetworkPolicyDoc is a hash generator
@@ -161,7 +218,7 @@ class Reader
     zones_sheet = @xlsx.sheet('Zones')
     zones_sheet.each(name: 'Zone', cidrs: 'CIDRs') do |h|
       next if h[:name] == 'Zone' && h[:cidrs] == 'CIDRs'
-      @network_policy.zones << NetworkPolicy::Zone.new(h[:name], h[:cidrs].split(/\s*,\s*/))
+      @network_policy.add_zone(h[:name], h[:cidrs].split(/\s*,\s*/))
     end
   end
 
@@ -186,8 +243,7 @@ class Reader
         cell.coordinate.column == i + 2
       end
       to_zone = column_zones[i]
-      rule = NetworkPolicy::Rule.new(from_zone, to_zone, target.value == 'Y')
-      @network_policy.rules << rule
+      @network_policy.add_rule(from_zone, to_zone) if target.value == 'Y'
     end
   end
 
@@ -214,8 +270,8 @@ class Writer
   end
 
   def write(network_policy)
-    File.open(filename, 'w+') do |f|
-      YAML.dump_stream(network_policy.to_doc_hashes, f)
+    File.open(filename, 'w') do |f|
+      f.write YAML.dump_stream(*network_policy.to_doc_hashes)
     end
   end
 end

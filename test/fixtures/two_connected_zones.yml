@@ -1,0 +1,106 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: intra-front-end
+spec:
+  podSelector:
+    matchLabels:
+      partition: front-end
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          partition: front-end
+    - ipBlock: 10.10.1.0/24
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          partition: front-end
+    - ipBlock: 10.10.1.0/24
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: intra-back-end
+spec:
+  podSelector:
+    matchLabels:
+      partition: back-end
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          partition: back-end
+    - ipBlock: 10.11.0.0/24
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          partition: back-end
+    - ipBlock: 10.11.0.0/24
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: front-end-to-back-end
+spec:
+  podSelector:
+    matchLabels:
+      partition: back-end
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          partition: front-end
+    - ipBlock: 10.10.1.0/24
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          partition: front-end
+    - ipBlock: 10.10.1.0/24
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: back-end-to-front-end
+spec:
+  podSelector:
+    matchLabels:
+      partition: front-end
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          partition: back-end
+    - ipBlock: 10.11.0.0/24
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          partition: back-end
+    - ipBlock: 10.11.0.0/24
