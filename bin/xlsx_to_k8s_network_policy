@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'xlsx_to_k8s_network_policy'
+
+if ARGV.size < 2
+  puts <<-USAGE
+    Usage:
+
+      xls_to_k8s_network_policy <path/to/document.xlsx> <path/to/output.yml>
+  USAGE
+  exit 1
+end
+
+XLSX_FILENAME = ARGV[0]
+unless File.exist?(XLSX_FILENAME) && File.readable?(XLSX_FILENAME)
+  warn %(File "#{XLSX_FILENAME}" does not exist or cannot be read!)
+  exit 1
+end
+
+unless File.file?(XLSX_FILENAME)
+  warn %(File "#{XLSX_FILENAME}" is not a regular file!)
+  exit 1
+end
+
+OUTPUT_FILENAME = ARGV[1]
+OUTPUT_DIR = File.dirname(OUTPUT_FILENAME)
+
+unless File.exist?(OUTPUT_DIR) &&
+       File.directory?(OUTPUT_DIR) &&
+       File.readable?(OUTPUT_DIR) &&
+       File.writable?(OUTPUT_DIR)
+  warn %(Directory "#{OUTPUT_DIR}" does not exist or cannot be read or written to!)
+  exit 1
+end
+
+if File.exist?(OUTPUT_FILENAME)
+  warn %(File "#{OUTPUT_FILENAME}" exists! Cowardly refusing to clobber output file.)
+  exit 1
+end
+
+network_policies = Reader.read(XLSX_FILENAME)
+Writer.write(network_policies, OUTPUT_FILENAME)

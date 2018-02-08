@@ -16,6 +16,20 @@ Gem::Specification.new do |s|
   s.email = "aisrael@gmail.com".freeze
   s.executables = ["xlsx_to_k8s_network_policy".freeze]
   s.extra_rdoc_files = [
+<<<<<<< HEAD
+    "LICENSE.txt",
+    "README.rdoc"
+  ]
+  s.files = [
+    "Gemfile",
+    "Gemfile.lock",
+    "LICENSE.txt",
+    "README.rdoc",
+    "Rakefile",
+    "VERSION",
+    "bin/xlsx_to_k8s_network_policy",
+    "lib/xlsx_to_k8s_network_policy.rb"
+=======
     "LICENSE.txt"
   ]
   s.files = [
@@ -24,6 +38,7 @@ Gem::Specification.new do |s|
     "Rakefile",
     "lib/xlsx_to_k8s_network_policy.rb",
     "xlsx_to_k8s_network_policy.gemspec"
+>>>>>>> master
   ]
   s.homepage = "http://github.com/aisrael/xlsx_to_k8s_network_policy".freeze
   s.licenses = ["MIT".freeze]

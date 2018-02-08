@@ -1,0 +1,36 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: front-end-zone
+spec:
+  podSelector:
+    matchLabels:
+      zone: front-end
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          zone: front-end
+    - ipBlock: 10.10.1.0/24
+    - ipBlock: 10.10.2.0/24
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          zone: front-end
+    - ipBlock: 10.10.1.0/24
+    - ipBlock: 10.10.2.0/24
