@@ -20,6 +20,9 @@ Juwelier::Tasks.new do |gem|
   gem.description = %(Generate Kubernetes Network Policy YAML resource definitions from .xlsx Excel spreadsheets)
   gem.email = 'aisrael@gmail.com'
   gem.authors = ['Alistair A. Israel']
+  gem.files.exclude '.*'
+  gem.files.exclude 'test/**/*'
+  gem.files.exclude 'spec/**/*'
 
   # dependencies defined in Gemfile
 end
