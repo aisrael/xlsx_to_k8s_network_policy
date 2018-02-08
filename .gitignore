@@ -47,5 +47,6 @@ pkg
 
 # For rubinius:
 #*.rbc
+<<<<<<< HEAD
 
-tmp/
+/tmp/
