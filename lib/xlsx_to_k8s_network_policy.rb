@@ -5,7 +5,7 @@ require 'roo'
 require 'yaml'
 
 # The NetworkPolicy
-class NetworkPolicy
+class NetworkPolicies
   attr_reader :zones, :rules
 
   # A Zone
@@ -206,7 +206,7 @@ class Reader
 
   def read
     @xlsx = Roo::Spreadsheet.open('./test/fixtures/network_policy.xlsx')
-    @network_policy = NetworkPolicy.new
+    @network_policy = NetworkPolicies.new
     read_zones
     read_rules
     @network_policy
