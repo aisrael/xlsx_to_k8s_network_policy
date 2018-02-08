@@ -135,6 +135,20 @@ spec:
     - ipBlock: 10.12.0.0/24
 ```
 
+### Installation
+
+This gem was developed using Ruby 2.5.0, but may work with earlier Ruby 2.x.
+
+```
+$ gem install xlsx_to_k8s_network_policy
+```
+
+### Usage
+
+```
+$ xlsx_to_k8s_network_policy network_policy.xlsx network_policy.yml
+```
+
 #### Contributing to `xlsx_to_k8s_network_policy`
  
 * Check out the latest master to make sure the feature hasn't been implemented or the bug hasn't been fixed yet.
