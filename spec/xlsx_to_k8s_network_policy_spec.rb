@@ -85,7 +85,8 @@ RSpec.describe 'xlsx_to_k8s_network_policy' do
   specify 'the end to end chain works' do
     network_policies = Reader.read('./test/fixtures/network_policies.xlsx')
     Writer.write(network_policies, 'tmp/network_policies.yml')
-    docs = YAML.load_stream(File.open('tmp/network_policies.yml'))
-    expect(docs.size).to eq(4)
+    actual = YAML.load_stream(File.open('tmp/network_policies.yml'))
+    expected = YAML.load_stream(File.open('./test/fixtures/network_policy.yml'))
+    expect(actual).to eq(expected)
   end
 end
