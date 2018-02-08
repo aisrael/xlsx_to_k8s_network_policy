@@ -12,11 +12,11 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: intra-front-end
+  name: front-end-zone
 spec:
   podSelector:
     matchLabels:
-      partition: front-end
+      zone: front-end
   policyTypes:
   - Ingress
   - Egress
@@ -24,23 +24,23 @@ spec:
   - from:
     - podSelector:
         matchLabels:
-          partition: front-end
+          zone: front-end
     - ipBlock: 10.10.1.0/24
   egress:
   - to:
     - podSelector:
         matchLabels:
-          partition: front-end
+          zone: front-end
     - ipBlock: 10.10.1.0/24
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: intra-back-end
+  name: back-end-zone
 spec:
   podSelector:
     matchLabels:
-      partition: back-end
+      zone: back-end
   policyTypes:
   - Ingress
   - Egress
@@ -48,11 +48,11 @@ spec:
   - from:
     - podSelector:
         matchLabels:
-          partition: back-end
+          zone: back-end
     - ipBlock: 10.11.0.0/24
   egress:
   - to:
     - podSelector:
         matchLabels:
-          partition: back-end
+          zone: back-end
     - ipBlock: 10.11.0.0/24

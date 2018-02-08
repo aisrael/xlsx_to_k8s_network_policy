@@ -1,12 +1,242 @@
 # frozen_string_literal: true
 
+require 'active_support/concern'
 require 'active_support/core_ext/hash'
 require 'roo'
 require 'yaml'
 
-# The NetworkPolicy
+# A base label selector
+class LabelSelector
+  # A `matchLabels` label selector
+  class MatchLabels < LabelSelector
+    attr_reader :labels
+    def initialize(labels = nil)
+      @labels = labels || {}
+    end
+
+    def []=(key, value)
+      @labels[key] = value
+    end
+
+    def as_hash
+      return {} if @labels.empty?
+      {
+        matchLabels: @labels
+      }
+    end
+  end
+  # TODO: MatchExpressions < LabelSelector
+  def ==(other)
+    other.class == self.class && other.labels == labels
+  end
+end
+
+# A `podSelector`
+class PodSelector
+  attr_reader :label_selector
+
+  def initialize(label_selector = nil)
+    @label_selector = label_selector || LabelSelector::MatchLabels.new
+  end
+
+  def []=(key, value)
+    @label_selector[key] = value
+  end
+
+  def as_hash
+    {
+      podSelector: label_selector.as_hash
+    }
+  end
+
+  def ==(other)
+    other.class == self.class && other.label_selector == label_selector
+  end
+end
+
+# The _real_ NetworkPolicy
+class NetworkPolicy
+  attr_reader :name
+  attr_reader :pod_selector
+  attr_reader :ingresses
+  attr_reader :egresses
+
+  def self.deny_all
+    NetworkPolicy.new('default-deny', PodSelector.new)
+  end
+
+  def initialize(name, pod_selector)
+    raise %(Invalid name "#{name}". Must consist of [a-z_-]+) unless /^[a-z_-]+$/ =~ name
+    @name = name
+    @pod_selector = pod_selector
+    @ingresses = []
+    @egresses = []
+  end
+
+  class NetworkPolicyPeer
+    # An {ipBlock: cidr} NetworkPolicyPeer
+    class IPBlock < NetworkPolicyPeer
+      attr_reader :cidr
+      def initialize(cidr = nil)
+        @cidr = cidr || []
+      end
+
+      def as_hash
+        {
+          ipBlock: cidr
+        }
+      end
+
+      def ==(other)
+        other.class == self.class && other.cidr == cidr
+      end
+    end
+
+    # A {podSelector: {...}} NetworkPolicyPeer
+    class PodSelectorNPP < NetworkPolicyPeer
+      attr_reader :pod_selector
+      def initialize(pod_selector)
+        @pod_selector = pod_selector
+      end
+      delegate :as_hash, to: :pod_selector
+      def ==(other)
+        other.class == self.class && other.pod_selector == pod_selector
+      end
+    end
+
+    # A {namespaceSelector: {...}} NetworkPolicyPeer
+    class NamespaceSelector < NetworkPolicyPeer
+      attr_reader :label_selector
+      def initialize(label_selector = nil)
+        @label_selector = label_selector || LabelSelector::MatchLabels.new
+      end
+
+      def []=(key, value)
+        @label_selector[key] = value
+      end
+
+      def as_hash
+        {
+          labelSelector: @label_selector.as_hash
+        }
+      end
+
+      def ==(other)
+        other.class == self.class && other.label_selector == label_selector
+      end
+    end
+  end
+
+  def add_pod_selector_ingress(pod_selector)
+    add_ingress(NetworkPolicyPeer::PodSelectorNPP.new(pod_selector))
+  end
+
+  def add_pod_selector_egress(pod_selector)
+    add_egress(NetworkPolicyPeer::PodSelectorNPP.new(pod_selector))
+  end
+
+  def add_cidr_ingress(cidr)
+    add_ingress(NetworkPolicyPeer::IPBlock.new(cidr))
+  end
+
+  def add_cidr_egress(cidr)
+    add_egress(NetworkPolicyPeer::IPBlock.new(cidr))
+  end
+
+  def add_ingress(ingress)
+    npp = case ingress
+          when PodSelector
+            NetworkPolicyPeer::PodSelectorNPP.new(ingress)
+          when NetworkPolicyPeer
+            ingress
+          else
+            raise "Don't know how to handle ingress of type #{ingress.class}!"
+          end
+    @ingresses << npp unless @ingresses.include?(npp)
+  end
+
+  def add_egress(egress)
+    npp = case egress
+          when PodSelector
+            NetworkPolicyPeer::PodSelectorNPP.new(egress)
+          when NetworkPolicyPeer
+            egress
+          else
+            raise "Don't know how to handle ingress of type #{egress.class}!"
+          end
+    @egresses << npp unless @egresses.include?(npp)
+  end
+
+  def as_hash
+    policy_types = []
+    policy_types << 'Ingress' if !@ingresses.empty? || @egresses.empty?
+    policy_types << 'Egress' if !@egresses.empty? || @ingresses.empty?
+    spec = pod_selector.as_hash
+    spec[:policyTypes] = policy_types
+    hash = {
+      apiVersion: 'networking.k8s.io/v1',
+      kind: 'NetworkPolicy',
+      metadata: {
+        name: name
+      },
+      spec: spec
+    }
+    add_ingress_and_egress(hash)
+    hash.deep_stringify_keys
+  end
+
+  private
+
+  def add_ingress_and_egress(hash)
+    unless @ingresses.empty?
+      hash[:spec][:ingress] = [
+        {
+          from: @ingresses.map(&:as_hash)
+        }
+      ]
+    end
+    return if @egresses.empty?
+    hash[:spec][:egress] = [
+      {
+        to: @egresses.map(&:as_hash)
+      }
+    ]
+  end
+end
+
+# A collection of `NetworkPolicy`s
 class NetworkPolicies
-  attr_reader :zones, :rules
+  attr_reader :zones
+  attr_reader :policies
+
+  def initialize
+    @zones = {}
+    @policies = {}
+  end
+
+  def zone_names
+    @zones.values.map(&:name)
+  end
+
+  def add_zone(name, cidrs)
+    zone = Zone.new(name, cidrs)
+    @zones[name] = zone
+    @policies[zone] = zone.to_network_policy
+  end
+
+  def allow(from_zone_name, to_zone_name)
+    from_zone = @zones[from_zone_name]
+    raise "No zone named #{from_zone_name}!" unless from_zone
+    to_zone = @zones[to_zone_name]
+    raise "No zone named #{to_zone_name}!" unless to_zone
+    from_zone.add_ingress_rules_to(policies[to_zone])
+    to_zone.add_egress_rules_to(policies[from_zone])
+  end
+
+  def to_doc_hashes
+    docs = [NetworkPolicy.deny_all] + @policies.values
+    docs.map(&:as_hash)
+  end
 
   # A Zone
   class Zone
@@ -20,174 +250,32 @@ class NetworkPolicies
       name.parameterize
     end
 
-    def as_partition_label_selector_hash
-      @hash ||= {
-        matchLabels: {
-          partition: normalized_name
-        }
-      }
-    end
-  end
-
-  # A Rule
-  class Rule
-    attr_accessor :from_zone, :to_zone
-    def initialize(from_zone, to_zone)
-      @from_zone = from_zone
-      @to_zone = to_zone
-    end
-
-    # rubocop:disable Metrics/AbcSize
-    def to_network_policy_doc
-      # rubocop:enable Metrics/AbcSize
-      normalized_from_zone_name = from_zone.normalized_name
-      normalized_to_zone_name = to_zone.normalized_name
-      npd = NetworkPolicyDoc.new("#{normalized_from_zone_name}-to-#{normalized_to_zone_name}")
-      npd.pod_selector = to_zone.as_partition_label_selector_hash
-      npd.allow_ingress(from_zone.as_partition_label_selector_hash)
-      npd.allow_egress(from_zone.as_partition_label_selector_hash)
-      from_zone.cidrs.each do |cidr|
-        npd.allow_ingress(cidr)
-        npd.allow_egress(cidr)
-      end
-      npd.to_hash
-    end
-  end
-
-  def initialize
-    @zones = []
-    @rules = []
-  end
-
-  def zone_names
-    @zones.map(&:name)
-  end
-
-  def add_zone(name, cidrs)
-    @zones << Zone.new(name, cidrs)
-  end
-
-  def add_rule(from_zone_name, to_zone_name)
-    from_zone = @zones.find { |z| z.name == from_zone_name }
-    raise "No zone named #{from_zone_name}!" unless from_zone
-    to_zone = @zones.find { |z| z.name == to_zone_name }
-    raise "No zone named #{to_zone_name}!" unless to_zone
-    @rules << Rule.new(from_zone, to_zone)
-  end
-
-  def to_doc_hashes
-    docs = [NetworkPolicyDoc.deny_all.to_hash]
-    docs += hash_zones
-    docs + hash_rules
-  end
-
-  private
-
-  def hash_zones
-    @zones.map do |zone|
-      normalized_zone_name = zone.normalized_name
-      npd = NetworkPolicyDoc.new("intra-#{normalized_zone_name}")
-      zone_partition_label_selector = zone.as_partition_label_selector_hash
-      npd.pod_selector = zone_partition_label_selector
-      npd.allow_ingress(zone_partition_label_selector)
-      npd.allow_egress(zone_partition_label_selector)
-      zone.cidrs.each do |cidr|
-        npd.allow_ingress(cidr)
-        npd.allow_egress(cidr)
-      end
-      npd.to_hash
-    end
-  end
-
-  def hash_rules
-    @rules.map(&:to_network_policy_doc)
-  end
-
-  # A NetworkPolicyDoc is a hash generator
-  class NetworkPolicyDoc
-    attr_reader :name
-    attr_accessor :pod_selector
-    attr_reader :ingresses
-    def initialize(name)
-      @name = name
-      @pod_selector = {}
-      @ingresses = []
-      @egresses = []
-    end
-
-    def self.deny_all
-      NetworkPolicyDoc.new('default-deny')
-    end
-
-    def allow_ingress(cidr_or_selector)
-      case cidr_or_selector
-      when String
-        @ingresses << cidr_or_selector
-      when Hash
-        @ingresses << cidr_or_selector
-      else
-        raise "Don't know how to handle ingress spec: #{cidr_or_selector}!"
+    def to_pod_selector
+      @pod_selector ||= begin
+        label_selector = LabelSelector::MatchLabels.new(zone: normalized_name)
+        PodSelector.new(label_selector)
       end
     end
 
-    def allow_egress(cidr_or_selector)
-      case cidr_or_selector
-      when String
-        @egresses << cidr_or_selector
-      when Hash
-        @egresses << cidr_or_selector
-      else
-        raise "Don't know how to handle egress spec: #{cidr_or_selector}!"
+    def to_network_policy
+      np = NetworkPolicy.new("#{normalized_name}-zone", to_pod_selector)
+      add_ingress_rules_to(np)
+      add_egress_rules_to(np)
+      np
+    end
+
+    def add_ingress_rules_to(np)
+      np.add_pod_selector_ingress(to_pod_selector)
+      @cidrs.each do |cidr|
+        np.add_cidr_ingress(cidr)
       end
     end
 
-    def to_hash
-      hash = {
-        apiVersion: 'networking.k8s.io/v1',
-        kind: 'NetworkPolicy',
-        metadata: {
-          name: name
-        },
-        spec: {
-          podSelector: pod_selector,
-          policyTypes: %w[Ingress Egress]
-        }
-      }
-      add_ingress_and_egress(hash)
-      hash.deep_stringify_keys
-    end
-
-    def map_ingress_or_egress(ioe)
-      ioe.map do |ingress|
-        case ingress
-        when String
-          {
-            ipBlock: ingress
-          }
-        else
-          {
-            podSelector: ingress
-          }
-        end
+    def add_egress_rules_to(np)
+      np.add_pod_selector_egress(to_pod_selector)
+      @cidrs.each do |cidr|
+        np.add_cidr_egress(cidr)
       end
-    end
-
-    private
-
-    def add_ingress_and_egress(hash)
-      unless @ingresses.empty?
-        hash[:spec][:ingress] = [
-          {
-            from: map_ingress_or_egress(@ingresses)
-          }
-        ]
-      end
-      return if @egresses.empty?
-      hash[:spec][:egress] = [
-        {
-          to: map_ingress_or_egress(@egresses)
-        }
-      ]
     end
   end
 end
@@ -231,19 +319,19 @@ class Reader
   def extract_rules(rules_sheet, column_zones)
     rules_sheet.each_row(offset: 1) do |row|
       from_zone = row[0].value
-      start_from = column_zones.index(from_zone) + 1
-      raise %(From zone "#{from_zone}" not found in zones) unless start_from
-      create_rules_from_row(column_zones, row, from_zone, start_from)
+      create_rules_from_row(column_zones, row, from_zone)
     end
   end
 
-  def create_rules_from_row(column_zones, row, from_zone, start_from)
-    (start_from...column_zones.size).each do |i|
+  def create_rules_from_row(column_zones, row, from_zone)
+    column_zones.size.times do |i|
       target = row.find do |cell|
         cell.coordinate.column == i + 2
       end
-      to_zone = column_zones[i]
-      @network_policy.add_rule(from_zone, to_zone) if target.value == 'Y'
+      if target && target.value == 'Y'
+        to_zone = column_zones[i]
+        @network_policy.allow(from_zone, to_zone)
+      end
     end
   end
 

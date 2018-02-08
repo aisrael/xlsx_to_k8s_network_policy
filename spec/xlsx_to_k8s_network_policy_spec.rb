@@ -44,10 +44,10 @@ RSpec.describe 'xlsx_to_k8s_network_policy' do
         network_policies = NetworkPolicies.new
         network_policies.add_zone(FRONT_END, %w[10.10.1.0/24])
         network_policies.add_zone(BACK_END, %w[10.11.0.0/24])
-        network_policies.add_rule(FRONT_END, BACK_END)
-        network_policies.add_rule(BACK_END, FRONT_END)
+        network_policies.allow(FRONT_END, BACK_END)
+        network_policies.allow(BACK_END, FRONT_END)
         actual = network_policies.to_doc_hashes
-        expect(actual.size).to eq(5)
+        expect(actual.size).to eq(3)
         expected = YAML.load_stream(File.open('./test/fixtures/two_connected_zones.yml'))
         expect(actual).to eq(expected)
       end
@@ -58,10 +58,9 @@ RSpec.describe 'xlsx_to_k8s_network_policy' do
     it 'works' do
       network_policies = Reader.read('./test/fixtures/network_policy.xlsx')
       expect(network_policies.zones.size).to eq(3)
-      expect(network_policies.zones.map(&:name)).to eq([FRONT_END, BACK_END, 'Infrastructure'])
+      expect(network_policies.zones.values.map(&:name)).to eq([FRONT_END, BACK_END, 'Infrastructure'])
       expected_cidrs = [%w[10.10.1.0/24 10.10.2.0/24], %w[10.11.0.0/24], %w[10.12.0.0/24]]
-      expect(network_policies.zones.map(&:cidrs)).to eq(expected_cidrs)
-      expect(network_policies.rules.size).to eq(2)
+      expect(network_policies.zones.values.map(&:cidrs)).to eq(expected_cidrs)
     end
   end
 
@@ -75,11 +74,11 @@ RSpec.describe 'xlsx_to_k8s_network_policy' do
       }.each_pair do |name, cidrs|
         network_policies.add_zone(name, cidrs)
       end
-      network_policies.add_rule(FRONT_END, BACK_END)
-      network_policies.add_rule(BACK_END, FRONT_END)
+      network_policies.allow(FRONT_END, BACK_END)
+      network_policies.allow(BACK_END, FRONT_END)
       Writer.write(network_policies, 'tmp/writer_test.yml')
       docs = YAML.load_stream(File.open('tmp/writer_test.yml'))
-      expect(docs.size).to eq(6)
+      expect(docs.size).to eq(4)
     end
   end
 
@@ -87,6 +86,6 @@ RSpec.describe 'xlsx_to_k8s_network_policy' do
     network_policies = Reader.read('./test/fixtures/network_policies.xlsx')
     Writer.write(network_policies, 'tmp/network_policies.yml')
     docs = YAML.load_stream(File.open('tmp/network_policies.yml'))
-    expect(docs.size).to eq(6)
+    expect(docs.size).to eq(4)
   end
 end
