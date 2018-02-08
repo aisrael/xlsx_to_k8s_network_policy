@@ -77,9 +77,16 @@ RSpec.describe 'xlsx_to_k8s_network_policy' do
       end
       network_policy.add_rule(FRONT_END, BACK_END)
       network_policy.add_rule(BACK_END, FRONT_END)
-      Writer.write(network_policy, 'tmp/network_policy.yml')
-      docs = YAML.load_stream(File.open('tmp/network_policy.yml'))
+      Writer.write(network_policy, 'tmp/writer_test.yml')
+      docs = YAML.load_stream(File.open('tmp/writer_test.yml'))
       expect(docs.size).to eq(6)
     end
+  end
+
+  specify 'the end to end chain works' do
+    network_policy = Reader.read('./test/fixtures/network_policy.xlsx')
+    Writer.write(network_policy, 'tmp/network_policy.yml')
+    docs = YAML.load_stream(File.open('tmp/network_policy.yml'))
+    expect(docs.size).to eq(6)
   end
 end
